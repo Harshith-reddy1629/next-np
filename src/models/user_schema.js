@@ -47,4 +47,5 @@ const usersSchema = mongoose.Schema(
     timestamps: true,
   }
 );
-export default mongoose.model("npusers", usersSchema);
+export default mongoose.models.npusers ||
+  mongoose.model("npusers", usersSchema);
