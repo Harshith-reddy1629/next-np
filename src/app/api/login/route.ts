@@ -8,10 +8,12 @@ import bcrypt from "bcrypt";
 
 import jwt from "jsonwebtoken";
 
-mongoConnection();
+import HTTP_STATUS from "@/constants/HTTP_STATUS.json";
 
 const validateInputs = async (body: { email: string; password: string }) => {
   const errors: { email?: string; password?: string } = {};
+
+  let status = HTTP_STATUS.BAD_REQUEST;
 
   if (!body.email) {
     errors.email = "please enter your mail";
@@ -22,7 +24,7 @@ const validateInputs = async (body: { email: string; password: string }) => {
   }
 
   if (Object.keys(errors).length > 0) {
-    throw new Error(JSON.stringify(errors));
+    throw { ...errors, status };
   } else {
     return body;
   }
@@ -31,7 +33,7 @@ const validateInputs = async (body: { email: string; password: string }) => {
 const validateUser = async (email: string, password: string) => {
   const errors: { email?: string; password?: string } = {};
 
-  let status: number = 400;
+  let status: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
 
   try {
     const user = await User.findOne({ email });
@@ -46,42 +48,47 @@ const validateUser = async (email: string, password: string) => {
           return token;
         } else {
           errors.email = "Email isn't Verified";
-          status = 403;
-          throw new Error();
+
+          status = HTTP_STATUS.FORBIDDEN;
+
+          throw errors;
         }
       } else {
         errors.password = "Password incorrect";
-        status = 400;
-        throw new Error();
+
+        status = HTTP_STATUS.BAD_REQUEST;
+
+        throw errors;
       }
     } else {
       errors.email = "Invalid Email";
-      status = 404;
-      throw new Error();
+
+      status = HTTP_STATUS.NOT_FOUND;
+
+      throw errors;
     }
   } catch (error: any) {
-    throw new Error(
-      JSON.stringify({ error: error.message, ...errors, status })
-    );
+    throw { ...error, error: error.message, status };
   }
 };
 
 export async function POST(request: NextRequest) {
   try {
+    await mongoConnection();
+
     const body = await request.json();
 
-    try {
-      await validateInputs(body);
+    await validateInputs(body);
 
-      const token = await validateUser(body.email, body.password);
+    const token = await validateUser(body.email, body.password);
 
-      return NextResponse.json({ token }, { status: 200 });
-    } catch (error: any) {
-      const { status, ...err } = JSON.parse(error.message);
-
-      return NextResponse.json({ ...err }, { status });
-    }
+    return NextResponse.json({ token }, { status: HTTP_STATUS.OK });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 501 });
+    const { status, ...err } = error;
+
+    return NextResponse.json(
+      { error: error.message, ...err },
+      { status: status || HTTP_STATUS.INTERNAL_SERVER_ERROR }
+    );
   }
 }
