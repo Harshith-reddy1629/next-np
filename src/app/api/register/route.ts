@@ -3,8 +3,7 @@ import mongoConnection from "@/dbConfig/DbConnection";
 import { NextRequest, NextResponse } from "next/server";
 import User from "@/models/user_schema";
 import bcrypt from "bcrypt";
-
-mongoConnection();
+import sendMail from "@/helpers/mailer";
 
 const validateInputs = async (body: {
   username?: string;
@@ -54,6 +53,7 @@ const checkUserAndEmail = async (username: string, email: string) => {
       username?: string;
       email?: string;
     } = {};
+
     let status: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
 
     const existingUser = await User.findOne({
@@ -81,13 +81,28 @@ const checkUserAndEmail = async (username: string, email: string) => {
 
 export async function POST(request: NextRequest) {
   try {
+    await mongoConnection();
+
     let body = await request.json();
+
     body = await validateInputs(body);
-    const createUser = await User.create(body);
+
     await checkUserAndEmail(body?.username, body?.email);
+
+    const createUser = await User.create(body);
+
+    await sendMail(
+      body.email,
+      "Verify Mail",
+      `Verify your mail to proceed ${body} `
+    );
+
     return NextResponse.json({ ...createUser }, { status: HTTP_STATUS.OK });
   } catch (error: any) {
     const { status, ...err } = error;
-    return NextResponse.json({ ...err }, { status });
+    return NextResponse.json(
+      { error: error.message, ...err },
+      { status: status || HTTP_STATUS.INTERNAL_SERVER_ERROR }
+    );
   }
 }
