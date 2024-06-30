@@ -1,3 +1,4 @@
+import HTTP_STATUS from "@/constants/HTTP_STATUS.json";
 import mongoConnection from "@/dbConfig/DbConnection";
 import { NextRequest, NextResponse } from "next/server";
 import User from "@/models/user_schema";
@@ -12,7 +13,7 @@ const validateInputs = async (body: {
   password: string;
 }) => {
   const { name, username, email, password } = body;
-
+  let status: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
   const errors: {
     username?: string;
     name?: string;
@@ -38,7 +39,8 @@ const validateInputs = async (body: {
   }
 
   if (Object.keys(errors).length > 0) {
-    throw new Error(JSON.stringify(errors));
+    status = HTTP_STATUS.BAD_REQUEST;
+    throw { ...errors, status };
   } else {
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -47,45 +49,45 @@ const validateInputs = async (body: {
 };
 
 const checkUserAndEmail = async (username: string, email: string) => {
-  const errors: {
-    username?: string;
-    email?: string;
-  } = {};
-  const existingUser = await User.findOne({
-    $or: [{ username }, { email }],
-  });
+  try {
+    const errors: {
+      username?: string;
+      email?: string;
+    } = {};
+    let status: number = HTTP_STATUS.INTERNAL_SERVER_ERROR;
 
-  if (existingUser) {
-    if (existingUser?.username === username) {
-      errors.username = "User already exists with this username";
-    }
-    if (existingUser?.email === email) {
-      errors.email = "User already exists with this email";
-    }
+    const existingUser = await User.findOne({
+      $or: [{ username }, { email }],
+    });
 
-    throw new Error(JSON.stringify(errors));
+    if (existingUser) {
+      status = HTTP_STATUS.BAD_REQUEST;
+
+      if (existingUser?.username === username) {
+        errors.username = "User already exists with this username";
+      }
+
+      if (existingUser?.email === email) {
+        errors.email = "User already exists with this email";
+      }
+
+      throw { ...errors, status };
+    }
+    return true;
+  } catch (error: any) {
+    throw { ...error, error: error.message };
   }
-  return true;
 };
 
 export async function POST(request: NextRequest) {
   try {
     let body = await request.json();
-
-    try {
-      body = await validateInputs(body);
-      await checkUserAndEmail(body?.username, body?.email);
-    } catch (error: any) {
-      return NextResponse.json(
-        { ...JSON.parse(error.message) },
-        { status: 400 }
-      );
-    }
-
+    body = await validateInputs(body);
     const createUser = await User.create(body);
-
-    return NextResponse.json({ ...createUser }, { status: 200 });
+    await checkUserAndEmail(body?.username, body?.email);
+    return NextResponse.json({ ...createUser }, { status: HTTP_STATUS.OK });
   } catch (error: any) {
-    return NextResponse.json({ error: error.message }, { status: 501 });
+    const { status, ...err } = error;
+    return NextResponse.json({ ...err }, { status });
   }
 }
