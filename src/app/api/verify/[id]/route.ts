@@ -1,16 +1,22 @@
 import HTTP_STATUS from "@/constants/HTTP_STATUS.json";
+
 import { NextRequest, NextResponse } from "next/server";
+
 import { v4 } from "uuid";
+
 import User from "@/models/user_schema";
-import { error } from "console";
+
 import mongoConnection from "@/dbConfig/DbConnection";
+
 export async function GET(
   request: NextRequest,
   { params }: { params: { id: "string" } }
 ) {
   try {
     const { id } = params;
+
     await mongoConnection();
+
     const findIdAndVerify = await User.findOneAndUpdate(
       { verificationId: id, isVerified: false },
       {
@@ -23,7 +29,10 @@ export async function GET(
     );
 
     if (findIdAndVerify) {
-      return NextResponse.json(findIdAndVerify, { status: HTTP_STATUS.OK });
+      return NextResponse.json(
+        { message: "Verification is successful" },
+        { status: HTTP_STATUS.OK }
+      );
     }
 
     return NextResponse.json(
@@ -32,7 +41,7 @@ export async function GET(
     );
   } catch (error: any) {
     return NextResponse.json(
-      { error: "Internal Server Error" },
+      { error: error.message || "Internal Server Error" },
       { status: HTTP_STATUS.INTERNAL_SERVER_ERROR }
     );
   }
